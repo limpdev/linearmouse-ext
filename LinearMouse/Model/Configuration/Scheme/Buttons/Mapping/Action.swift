@@ -61,6 +61,9 @@ extension Scheme.Buttons.Mapping.Action {
         case mouseButtonRight = "mouse.button.right"
         case mouseButtonBack = "mouse.button.back"
         case mouseButtonForward = "mouse.button.forward"
+        
+        case mouseButtonLeftCommand = "mouse.button.left.command"
+        case mouseButtonLeftShift = "mouse.button.left.shift"
     }
 
     enum Arg1: Equatable, Hashable {

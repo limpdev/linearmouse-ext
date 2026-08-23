@@ -17,6 +17,10 @@ extension Scheme.Buttons.Mapping.Action: CustomStringConvertible {
 extension Scheme.Buttons.Mapping.Action.Arg0: CustomStringConvertible {
     var description: String {
         switch self {
+        case .mouseButtonLeftCommand:
+            return NSLocalizedString("Cmd + primary click", comment: "")
+        case .mouseButtonLeftShift:
+            return NSLocalizedString("Shift + primary click", comment: "")
         case .auto:
             return NSLocalizedString("Default action", comment: "")
         case .none:

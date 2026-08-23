@@ -501,6 +501,12 @@ extension ButtonActionExecutor {
         targetBundleIdentifier: String?
     ) throws {
         switch action {
+        case .arg0(.mouseButtonLeftCommand):
+            postModifierClickEvent(mouseButton: .left, modifierKeys: [.command])
+
+        case .arg0(.mouseButtonLeftShift):
+            postModifierClickEvent(mouseButton: .left, modifierKeys: [.shift])
+
         case .arg0(.none), .arg0(.auto):
             return
 
@@ -734,7 +740,7 @@ extension ButtonActionExecutor {
         }
     }
 
-    private func postClickEvent(mouseButton: CGMouseButton, clickState: Int64? = nil) {
+    private func postClickEvent(mouseButton: CGMouseButton, flags: CGEventFlags = [], clickState: Int64? = nil) {
         guard let location = CGEvent(source: nil)?.location else {
             return
         }
@@ -756,6 +762,9 @@ extension ButtonActionExecutor {
             return
         }
 
+        mouseDownEvent.flags = flags
+        mouseUpEvent.flags = flags
+
         if let clickState {
             mouseDownEvent.setIntegerValueField(.mouseEventClickState, value: clickState)
             mouseUpEvent.setIntegerValueField(.mouseEventClickState, value: clickState)
@@ -763,6 +772,72 @@ extension ButtonActionExecutor {
 
         mouseDownEvent.post(tap: .cgSessionEventTap)
         mouseUpEvent.post(tap: .cgSessionEventTap)
+    }
+
+    private func postModifierClickEvent(
+        mouseButton: CGMouseButton,
+        modifierKeys: [Key]
+    ) {
+        guard let location = CGEvent(source: nil)?.location else {
+            return
+        }
+
+        let source = CGEventSource(stateID: .hidSystemState)
+
+        // 1. Press modifier keys so system and browser register modifier state
+        try? keySimulator.down(keys: modifierKeys, tap: .cgSessionEventTap)
+
+        // 2. Build complete modifier flags (generic + device specific)
+        var flags = CGEventFlags()
+        for key in modifierKeys {
+            switch key {
+            case .command, .commandRight:
+                flags.insert([.maskCommand, CGEventFlags(rawValue: UInt64(NX_DEVICELCMDKEYMASK))])
+            case .shift, .shiftRight:
+                flags.insert([.maskShift, CGEventFlags(rawValue: UInt64(NX_DEVICELSHIFTKEYMASK))])
+            case .option, .optionRight:
+                flags.insert([.maskAlternate, CGEventFlags(rawValue: UInt64(NX_DEVICELALTKEYMASK))])
+            case .control, .controlRight:
+                flags.insert([.maskControl, CGEventFlags(rawValue: UInt64(NX_DEVICELCTLKEYMASK))])
+            default:
+                break
+            }
+        }
+
+        // 3. Post Mouse Down
+        guard let mouseDownEvent = CGEvent(
+            mouseEventSource: source,
+            mouseType: mouseButton.fixedCGEventType(of: .leftMouseDown),
+            mouseCursorPosition: location,
+            mouseButton: mouseButton
+        ) else {
+            try? keySimulator.up(keys: modifierKeys.reversed(), tap: .cgSessionEventTap)
+            return
+        }
+        mouseDownEvent.flags = flags
+        mouseDownEvent.isLinearMouseSyntheticEvent = true
+        mouseDownEvent.post(tap: .cgSessionEventTap)
+
+        // 4. Post Mouse Up after a short delay (15ms), then release modifier keys
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.015) { [self] in
+            guard let mouseUpEvent = CGEvent(
+                mouseEventSource: source,
+                mouseType: mouseButton.fixedCGEventType(of: .leftMouseUp),
+                mouseCursorPosition: location,
+                mouseButton: mouseButton
+            ) else {
+                try? keySimulator.up(keys: modifierKeys.reversed(), tap: .cgSessionEventTap)
+                return
+            }
+            mouseUpEvent.flags = flags
+            mouseUpEvent.isLinearMouseSyntheticEvent = true
+            mouseUpEvent.post(tap: .cgSessionEventTap)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.015) { [self] in
+                try? keySimulator.up(keys: modifierKeys.reversed(), tap: .cgSessionEventTap)
+                resetKeySimulatorIfNothingIsHeld()
+            }
+        }
     }
 }
 
